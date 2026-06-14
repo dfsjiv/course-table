@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'appearance.dart';
 import 'custom_event.dart';
 import 'event_editor.dart';
+import 'layout_policy.dart';
 import 'models.dart';
 import 'notification_service.dart';
 import 'reminders.dart';
@@ -230,7 +231,7 @@ class _HomePageState extends State<HomePage> {
 
     final week = timetable.weekFor(_selectedDate);
     return Scaffold(
-      extendBodyBehindAppBar: widget.appearance.backgroundPath != null,
+      extendBodyBehindAppBar: extendTimetableBehindAppBar(),
       floatingActionButton: _weekView
           ? null
           : FloatingActionButton.extended(
