@@ -1,19 +1,45 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui' show FontFeature;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import 'appearance.dart';
+import 'custom_event.dart';
+import 'event_editor.dart';
 import 'models.dart';
 import 'notification_service.dart';
 import 'reminders.dart';
 import 'storage.dart';
+import 'settings_page.dart';
 import 'xls_parser.dart';
 
 void main() => runApp(const CourseTableApp());
 
-class CourseTableApp extends StatelessWidget {
+class CourseTableApp extends StatefulWidget {
   const CourseTableApp({super.key});
+
+  @override
+  State<CourseTableApp> createState() => _CourseTableAppState();
+}
+
+class _CourseTableAppState extends State<CourseTableApp> {
+  final _storage = TimetableStorage();
+  AppearanceSettings _appearance = const AppearanceSettings();
+
+  @override
+  void initState() {
+    super.initState();
+    _storage.loadAppearance().then((value) {
+      if (mounted) setState(() => _appearance = value);
+    });
+  }
+
+  Future<void> _changeAppearance(AppearanceSettings value) async {
+    await _storage.saveAppearance(value);
+    if (mounted) setState(() => _appearance = value);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -25,13 +51,31 @@ class CourseTableApp extends StatelessWidget {
         scaffoldBackgroundColor: const Color(0xfff7f8fc),
         useMaterial3: true,
       ),
-      home: const HomePage(),
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xff60a5fa),
+          brightness: Brightness.dark,
+        ),
+        useMaterial3: true,
+      ),
+      themeMode: _appearance.themeMode,
+      home: HomePage(
+        appearance: _appearance,
+        onAppearanceChanged: _changeAppearance,
+      ),
     );
   }
 }
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  const HomePage({
+    super.key,
+    required this.appearance,
+    required this.onAppearanceChanged,
+  });
+
+  final AppearanceSettings appearance;
+  final ValueChanged<AppearanceSettings> onAppearanceChanged;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -41,6 +85,7 @@ class _HomePageState extends State<HomePage> {
   final _storage = TimetableStorage();
   final _notifications = NotificationService();
   Timetable? _timetable;
+  List<CustomEvent> _events = [];
   DateTime _selectedDate = _today();
   DateTime _now = DateTime.now();
   Timer? _clock;
@@ -71,16 +116,53 @@ class _HomePageState extends State<HomePage> {
   Future<void> _load() async {
     final timetable = await _storage.load();
     final reminderMinutes = await _storage.loadReminderMinutes();
+    final events = await _storage.loadCustomEvents();
     await _notifications.initialize();
     if (timetable != null) {
       await _notifications.schedule(timetable, reminderMinutes);
     }
+    await _notifications.scheduleCustomEvents(events);
     if (!mounted) return;
     setState(() {
       _timetable = timetable;
+      _events = events;
       _reminderMinutes = reminderMinutes;
       _loading = false;
     });
+  }
+
+  Future<void> _saveEvents(List<CustomEvent> events) async {
+    await _storage.saveCustomEvents(events);
+    await _notifications.scheduleCustomEvents(events);
+    if (mounted) setState(() => _events = events);
+  }
+
+  Future<void> _addEvent() async {
+    final event = await showEventEditor(context, initialDate: _selectedDate);
+    if (event != null) await _saveEvents([..._events, event]);
+  }
+
+  Future<void> _editEvent(CustomEvent event) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(leading: const Icon(Icons.edit_outlined), title: const Text('编辑'), onTap: () => Navigator.pop(context, 'edit')),
+            ListTile(leading: const Icon(Icons.delete_outline), title: const Text('删除'), onTap: () => Navigator.pop(context, 'delete')),
+          ],
+        ),
+      ),
+    );
+    if (action == 'delete') {
+      await _saveEvents(_events.where((item) => item.id != event.id).toList());
+    } else if (action == 'edit' && mounted) {
+      final updated = await showEventEditor(context, initialDate: event.date, event: event);
+      if (updated != null) {
+        await _saveEvents(_events.map((item) => item.id == event.id ? updated : item).toList());
+      }
+    }
   }
 
   Future<void> _import() async {
@@ -96,6 +178,7 @@ class _HomePageState extends State<HomePage> {
       await _storage.save(timetable);
       await _notifications.requestPermission();
       await _notifications.schedule(timetable, _reminderMinutes);
+      await _notifications.scheduleCustomEvents(_events);
       if (!mounted) return;
       setState(() {
         _timetable = timetable;
@@ -129,7 +212,10 @@ class _HomePageState extends State<HomePage> {
     await _storage.saveReminderMinutes(selected);
     if (selected > 0) await _notifications.requestPermission();
     final timetable = _timetable;
-    if (timetable != null) await _notifications.schedule(timetable, selected);
+    if (timetable != null) {
+      await _notifications.schedule(timetable, selected);
+      await _notifications.scheduleCustomEvents(_events);
+    }
     if (!mounted) return;
     setState(() => _reminderMinutes = selected);
   }
@@ -144,10 +230,31 @@ class _HomePageState extends State<HomePage> {
 
     final week = timetable.weekFor(_selectedDate);
     return Scaffold(
+      extendBodyBehindAppBar: widget.appearance.backgroundPath != null,
+      floatingActionButton: _weekView
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: _addEvent,
+              icon: const Icon(Icons.add),
+              label: const Text('新建事件'),
+            ),
       appBar: AppBar(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         title: Text(timetable.className.isEmpty ? '我的课表' : timetable.className),
         actions: [
+          IconButton(
+            tooltip: '设置',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => SettingsPage(
+                  appearance: widget.appearance,
+                  onChanged: widget.onAppearanceChanged,
+                ),
+              ),
+            ),
+            icon: const Icon(Icons.settings_outlined),
+          ),
           IconButton(
             tooltip: '课前提醒',
             onPressed: _chooseReminder,
@@ -169,7 +276,9 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
       ),
-      body: Column(
+      body: _Background(
+        appearance: widget.appearance,
+        child: Column(
         children: [
           _DateHeader(
             date: _selectedDate,
@@ -181,16 +290,19 @@ class _HomePageState extends State<HomePage> {
             selectedDate: _selectedDate,
             onSelected: (date) => setState(() => _selectedDate = date),
           ),
-          _NextCourseBanner(timetable: timetable, now: _now),
+          _NextCourseBanner(timetable: timetable, events: _events, now: _now),
           Expanded(
             child: _weekView
                 ? TimetableGrid(courses: timetable.coursesForWeek(week))
                 : DaySchedule(
                     date: _selectedDate,
                     courses: timetable.coursesForDate(_selectedDate),
+                    events: customEventsForDate(_events, _selectedDate),
+                    onEventTap: _editEvent,
                   ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -344,16 +456,39 @@ class _DayStrip extends StatelessWidget {
 }
 
 class _NextCourseBanner extends StatelessWidget {
-  const _NextCourseBanner({required this.timetable, required this.now});
+  const _NextCourseBanner({
+    required this.timetable,
+    required this.events,
+    required this.now,
+  });
 
   final Timetable timetable;
+  final List<CustomEvent> events;
   final DateTime now;
 
   @override
   Widget build(BuildContext context) {
     final next = nextCourse(timetable, now);
-    if (next == null) return const SizedBox.shrink();
-    final duration = next.start.difference(now);
+    CustomEvent? nextEvent;
+    DateTime? nextEventStart;
+    for (var offset = 0; offset <= 120 && nextEvent == null; offset++) {
+      final date = dateOnly(now).add(Duration(days: offset));
+      for (final event in customEventsForDate(events, date)) {
+        final start = event.startOn(date);
+        if (start.isAfter(now)) {
+          nextEvent = event;
+          nextEventStart = start;
+          break;
+        }
+      }
+    }
+    final useEvent = nextEventStart != null &&
+        (next == null || nextEventStart!.isBefore(next.start));
+    if (next == null && nextEvent == null) return const SizedBox.shrink();
+    final title = useEvent ? nextEvent!.title : next!.course.name;
+    final location = useEvent ? nextEvent!.location : next!.course.room;
+    final start = useEvent ? nextEventStart! : next!.start;
+    final duration = start.difference(now);
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 2),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
@@ -372,7 +507,7 @@ class _NextCourseBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '下一节 · ${next.course.name}',
+                  '下一项 · $title',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -382,9 +517,7 @@ class _NextCourseBanner extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  next.course.room.isEmpty
-                      ? '第${next.course.startPeriod}-${next.course.endPeriod}节'
-                      : next.course.room,
+                  location.isEmpty ? '即将开始' : location,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: Colors.white70, fontSize: 12),
@@ -408,13 +541,28 @@ class _NextCourseBanner extends StatelessWidget {
 }
 
 class DaySchedule extends StatelessWidget {
-  const DaySchedule({super.key, required this.date, required this.courses});
+  const DaySchedule({
+    super.key,
+    required this.date,
+    required this.courses,
+    required this.events,
+    required this.onEventTap,
+  });
   final DateTime date;
   final List<Course> courses;
+  final List<CustomEvent> events;
+  final ValueChanged<CustomEvent> onEventTap;
 
   @override
   Widget build(BuildContext context) {
-    if (courses.isEmpty) {
+    final items = <({int start, Course? course, CustomEvent? event})>[
+      ...courses.map((course) {
+        final time = periodStartTimes[course.startPeriod - 1];
+        return (start: time.$1 * 60 + time.$2, course: course, event: null);
+      }),
+      ...events.map((event) => (start: event.startMinutes, course: null, event: event)),
+    ]..sort((a, b) => a.start.compareTo(b.start));
+    if (items.isEmpty) {
       return const Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -428,9 +576,61 @@ class DaySchedule extends StatelessWidget {
     }
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
-      itemCount: courses.length,
+      itemCount: items.length,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (context, index) => _DayCourseCard(course: courses[index]),
+      itemBuilder: (context, index) {
+        final item = items[index];
+        return item.course != null
+            ? _DayCourseCard(course: item.course!)
+            : _CustomEventCard(event: item.event!, onTap: () => onEventTap(item.event!));
+      },
+    );
+  }
+}
+
+class _CustomEventCard extends StatelessWidget {
+  const _CustomEventCard({required this.event, required this.onTap});
+  final CustomEvent event;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final start = '${(event.startMinutes ~/ 60).toString().padLeft(2, '0')}:${(event.startMinutes % 60).toString().padLeft(2, '0')}';
+    final end = '${(event.endMinutes ~/ 60).toString().padLeft(2, '0')}:${(event.endMinutes % 60).toString().padLeft(2, '0')}';
+    return Card(
+      elevation: 0,
+      color: Theme.of(context).colorScheme.tertiaryContainer.withValues(alpha: 0.88),
+      child: ListTile(
+        onTap: onTap,
+        leading: const Icon(Icons.event_note_outlined),
+        title: Text(event.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+        subtitle: Text('$start-$end${event.location.isEmpty ? '' : ' · ${event.location}'}'),
+        trailing: event.weekly ? const Icon(Icons.repeat, size: 18) : null,
+      ),
+    );
+  }
+}
+
+class _Background extends StatelessWidget {
+  const _Background({required this.appearance, required this.child});
+  final AppearanceSettings appearance;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final path = appearance.backgroundPath;
+    if (path == null || !File(path).existsSync()) return child;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Image.file(File(path), fit: BoxFit.cover),
+        Container(
+          color: Theme.of(context).scaffoldBackgroundColor.withValues(
+                alpha: 1 - appearance.backgroundOpacity,
+              ),
+        ),
+        child,
+      ],
     );
   }
 }

@@ -7,6 +7,7 @@ import 'package:timezone/timezone.dart' as tz;
 
 import 'models.dart';
 import 'reminders.dart';
+import 'custom_event.dart';
 
 class NotificationService {
   final _plugin = FlutterLocalNotificationsPlugin();
@@ -69,6 +70,41 @@ class NotificationService {
         ),
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       );
+    }
+  }
+
+  Future<void> scheduleCustomEvents(List<CustomEvent> events) async {
+    await initialize();
+    for (var id = 1000; id < 1100; id++) {
+      await _plugin.cancel(id: id);
+    }
+    final now = DateTime.now();
+    var id = 1000;
+    for (var offset = 0; offset <= 120 && id < 1100; offset++) {
+      final date = DateTime(now.year, now.month, now.day).add(Duration(days: offset));
+      for (final event in customEventsForDate(events, date)) {
+        if (event.reminderMinutes <= 0) continue;
+        final notificationTime =
+            event.startOn(date).subtract(Duration(minutes: event.reminderMinutes));
+        if (!notificationTime.isAfter(now)) continue;
+        await _plugin.zonedSchedule(
+          id: id++,
+          title: '${event.title}还有${event.reminderMinutes}分钟开始',
+          body: event.location.isEmpty ? '自定义事件' : event.location,
+          scheduledDate: tz.TZDateTime.from(notificationTime, tz.local),
+          notificationDetails: const NotificationDetails(
+            android: AndroidNotificationDetails(
+              'course_reminders',
+              '上课提醒',
+              channelDescription: '在课程或事件开始前提醒',
+              importance: Importance.high,
+              priority: Priority.high,
+            ),
+            iOS: DarwinNotificationDetails(),
+          ),
+          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        );
+      }
     }
   }
 }
