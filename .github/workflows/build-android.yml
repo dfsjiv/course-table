@@ -1,0 +1,58 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      - name: Generate Android project
+        run: flutter create --platforms=android --org cn.hieu --project-name course_table .
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Test Flutter code
+        run: flutter test
+
+      - name: Test Rust parser
+        working-directory: rust
+        run: cargo test
+
+      - name: Build Rust libraries for Android
+        working-directory: rust
+        run: |
+          cargo install cargo-ndk --locked
+          cargo ndk \
+            -t arm64-v8a \
+            -t armeabi-v7a \
+            -t x86_64 \
+            -o ../android/app/src/main/jniLibs \
+            build --release
+
+      - name: Build APK
+        run: flutter build apk --release --split-per-abi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: course-table-apk
+          path: build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: error
+

@@ -1,0 +1,15 @@
+[package]
+name = "course_table_parser"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+calamine = "0.26"
+chrono = "0.4"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+

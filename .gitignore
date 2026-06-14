@@ -1,0 +1,11 @@
+.dart_tool/
+.flutter-plugins*
+.packages
+build/
+android/
+ios/
+windows/
+linux/
+macos/
+rust/target/
+
