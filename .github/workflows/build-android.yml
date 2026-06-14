@@ -12,7 +12,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -53,10 +53,19 @@ jobs:
             build --release
 
       - name: Build APK
-        run: flutter build apk --release --split-per-abi
+        run: flutter build apk --release
 
       - uses: actions/upload-artifact@v4
         with:
           name: course-table-apk
-          path: build/app/outputs/flutter-apk/*.apk
+          path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
+
+      - name: Publish latest APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: CourseTable Latest
+          body: 最新安卓安装包。下载 app-release.apk 后直接安装。
+          target_commitish: main
+          files: build/app/outputs/flutter-apk/app-release.apk
