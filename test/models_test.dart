@@ -1,4 +1,5 @@
 import 'package:course_table/models.dart';
+import 'package:course_table/reminders.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -39,5 +40,20 @@ void main() {
   test('returns the date for a teaching week and weekday', () {
     expect(timetable.dateFor(15, 1), DateTime(2026, 6, 8));
     expect(timetable.dateFor(15, 7), DateTime(2026, 6, 14));
+  });
+
+  test('finds next course and formats live countdown', () {
+    final next = nextCourse(timetable, DateTime(2026, 3, 4, 7, 30));
+    expect(next?.course, course);
+    expect(next?.start, DateTime(2026, 3, 4, 8));
+    expect(countdownText(const Duration(hours: 1, minutes: 2, seconds: 3)), '01:02:03');
+  });
+
+  test('builds future course occurrences in chronological order', () {
+    final courses = futureCourses(timetable, DateTime(2026, 3, 1), limit: 2);
+    expect(courses.map((item) => item.start).toList(), [
+      DateTime(2026, 3, 4, 8),
+      DateTime(2026, 3, 18, 8),
+    ]);
   });
 }

@@ -1,7 +1,12 @@
+import 'dart:async';
+import 'dart:ui' show FontFeature;
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import 'models.dart';
+import 'notification_service.dart';
+import 'reminders.dart';
 import 'storage.dart';
 import 'xls_parser.dart';
 
@@ -34,8 +39,12 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final _storage = TimetableStorage();
+  final _notifications = NotificationService();
   Timetable? _timetable;
   DateTime _selectedDate = _today();
+  DateTime _now = DateTime.now();
+  Timer? _clock;
+  int _reminderMinutes = 15;
   bool _weekView = false;
   bool _loading = true;
 
@@ -48,13 +57,28 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _load();
+    _clock = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _now = DateTime.now());
+    });
+  }
+
+  @override
+  void dispose() {
+    _clock?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
     final timetable = await _storage.load();
+    final reminderMinutes = await _storage.loadReminderMinutes();
+    await _notifications.initialize();
+    if (timetable != null) {
+      await _notifications.schedule(timetable, reminderMinutes);
+    }
     if (!mounted) return;
     setState(() {
       _timetable = timetable;
+      _reminderMinutes = reminderMinutes;
       _loading = false;
     });
   }
@@ -70,6 +94,8 @@ class _HomePageState extends State<HomePage> {
     try {
       final timetable = XlsParser().parse(bytes);
       await _storage.save(timetable);
+      await _notifications.requestPermission();
+      await _notifications.schedule(timetable, _reminderMinutes);
       if (!mounted) return;
       setState(() {
         _timetable = timetable;
@@ -81,6 +107,31 @@ class _HomePageState extends State<HomePage> {
         SnackBar(content: Text('导入失败：$error')),
       );
     }
+  }
+
+  Future<void> _chooseReminder() async {
+    final selected = await showDialog<int>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('课前提醒'),
+        children: [
+          for (final minutes in [0, 5, 10, 15, 30, 60])
+            RadioListTile<int>(
+              value: minutes,
+              groupValue: _reminderMinutes,
+              title: Text(minutes == 0 ? '关闭提醒' : '提前 $minutes 分钟'),
+              onChanged: (value) => Navigator.pop(context, value),
+            ),
+        ],
+      ),
+    );
+    if (selected == null) return;
+    await _storage.saveReminderMinutes(selected);
+    if (selected > 0) await _notifications.requestPermission();
+    final timetable = _timetable;
+    if (timetable != null) await _notifications.schedule(timetable, selected);
+    if (!mounted) return;
+    setState(() => _reminderMinutes = selected);
   }
 
   @override
@@ -97,6 +148,15 @@ class _HomePageState extends State<HomePage> {
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         title: Text(timetable.className.isEmpty ? '我的课表' : timetable.className),
         actions: [
+          IconButton(
+            tooltip: '课前提醒',
+            onPressed: _chooseReminder,
+            icon: Icon(
+              _reminderMinutes == 0
+                  ? Icons.notifications_off_outlined
+                  : Icons.notifications_active_outlined,
+            ),
+          ),
           IconButton(
             tooltip: _weekView ? '按天显示' : '整周课表',
             onPressed: () => setState(() => _weekView = !_weekView),
@@ -121,6 +181,7 @@ class _HomePageState extends State<HomePage> {
             selectedDate: _selectedDate,
             onSelected: (date) => setState(() => _selectedDate = date),
           ),
+          _NextCourseBanner(timetable: timetable, now: _now),
           Expanded(
             child: _weekView
                 ? TimetableGrid(courses: timetable.coursesForWeek(week))
@@ -275,6 +336,70 @@ class _DayStrip extends StatelessWidget {
           IconButton(
             onPressed: () => onSelected(selectedDate.add(const Duration(days: 1))),
             icon: const Icon(Icons.chevron_right),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NextCourseBanner extends StatelessWidget {
+  const _NextCourseBanner({required this.timetable, required this.now});
+
+  final Timetable timetable;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    final next = nextCourse(timetable, now);
+    if (next == null) return const SizedBox.shrink();
+    final duration = next.start.difference(now);
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 2),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xff2563eb), Color(0xff4f46e5)],
+        ),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.timer_outlined, color: Colors.white),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '下一节 · ${next.course.name}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  next.course.room.isEmpty
+                      ? '第${next.course.startPeriod}-${next.course.endPeriod}节'
+                      : next.course.room,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            countdownText(duration),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              fontFeatures: [FontFeature.tabularFigures()],
+            ),
           ),
         ],
       ),
