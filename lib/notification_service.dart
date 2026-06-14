@@ -18,7 +18,7 @@ class NotificationService {
     final timezone = await FlutterTimezone.getLocalTimezone();
     tz.setLocalLocation(tz.getLocation(timezone.identifier));
     await _plugin.initialize(
-      const InitializationSettings(
+      settings: const InitializationSettings(
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
         iOS: DarwinInitializationSettings(),
       ),
@@ -51,13 +51,13 @@ class NotificationService {
           occurrence.start.subtract(Duration(minutes: minutesBefore));
       if (!notificationTime.isAfter(now)) continue;
       await _plugin.zonedSchedule(
-        index + 1,
-        '${occurrence.course.name}还有$minutesBefore分钟开始',
-        occurrence.course.room.isEmpty
+        id: index + 1,
+        title: '${occurrence.course.name}还有$minutesBefore分钟开始',
+        body: occurrence.course.room.isEmpty
             ? '第${occurrence.course.startPeriod}-${occurrence.course.endPeriod}节'
             : '${occurrence.course.room} · 第${occurrence.course.startPeriod}-${occurrence.course.endPeriod}节',
-        tz.TZDateTime.from(notificationTime, tz.local),
-        const NotificationDetails(
+        scheduledDate: tz.TZDateTime.from(notificationTime, tz.local),
+        notificationDetails: const NotificationDetails(
           android: AndroidNotificationDetails(
             'course_reminders',
             '上课提醒',
