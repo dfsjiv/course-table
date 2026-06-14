@@ -1,0 +1,63 @@
+name: Build Windows
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Generate Windows project
+        run: |
+          flutter create --platforms=windows --org cn.hieu --project-name course_table .
+          Remove-Item test\widget_test.dart -ErrorAction SilentlyContinue
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Test Flutter code
+        run: flutter test
+
+      - name: Test and build Rust parser
+        working-directory: rust
+        run: |
+          cargo test
+          cargo build --release
+
+      - name: Build Windows application
+        run: |
+          flutter build windows --release
+          Copy-Item rust\target\release\course_table_parser.dll build\windows\x64\runner\Release\
+          Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath course-table-windows-x64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: course-table-windows-x64
+          path: course-table-windows-x64.zip
+          if-no-files-found: error
+
+      - name: Publish latest Windows build
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: CourseTable Latest
+          body: 下载对应平台的安装包或压缩包。Windows 版解压后运行 course_table.exe。
+          target_commitish: main
+          files: course-table-windows-x64.zip

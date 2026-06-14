@@ -1,0 +1,67 @@
+name: Build iOS Unsigned
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+
+      - name: Generate iOS project
+        run: |
+          flutter create --platforms=ios --org cn.hieu --project-name course_table .
+          rm -f test/widget_test.dart
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Test Flutter code
+        run: flutter test
+
+      - name: Test and build Rust parser
+        working-directory: rust
+        run: |
+          cargo test
+          cargo build --release --target aarch64-apple-ios
+
+      - name: Link Rust parser
+        run: python3 tool/configure_ios_rust.py rust/target/aarch64-apple-ios/release/libcourse_table_parser.a
+
+      - name: Build unsigned iOS application
+        run: |
+          flutter build ios --release --no-codesign
+          ditto -c -k --sequesterRsrc --keepParent build/ios/iphoneos/Runner.app course-table-ios-unsigned.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: course-table-ios-unsigned
+          path: course-table-ios-unsigned.zip
+          if-no-files-found: error
+
+      - name: Publish latest unsigned iOS build
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: CourseTable Latest
+          body: iOS 压缩包未签名，普通 iPhone 无法直接安装，需要使用苹果开发者证书签名。
+          target_commitish: main
+          files: course-table-ios-unsigned.zip

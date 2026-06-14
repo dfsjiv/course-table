@@ -8,6 +8,7 @@ import 'package:timezone/timezone.dart' as tz;
 import 'models.dart';
 import 'reminders.dart';
 import 'custom_event.dart';
+import 'platform_capabilities.dart';
 
 class NotificationService {
   final _plugin = FlutterLocalNotificationsPlugin();
@@ -15,6 +16,10 @@ class NotificationService {
 
   Future<void> initialize() async {
     if (_ready) return;
+    if (!supportsScheduledNotifications()) {
+      _ready = true;
+      return;
+    }
     tz.initializeTimeZones();
     final timezone = await FlutterTimezone.getLocalTimezone();
     tz.setLocalLocation(tz.getLocation(timezone.identifier));
@@ -28,6 +33,7 @@ class NotificationService {
   }
 
   Future<void> requestPermission() async {
+    if (!supportsScheduledNotifications()) return;
     await initialize();
     if (Platform.isAndroid) {
       await _plugin
@@ -41,6 +47,7 @@ class NotificationService {
   }
 
   Future<void> schedule(Timetable timetable, int minutesBefore) async {
+    if (!supportsScheduledNotifications()) return;
     await initialize();
     await _plugin.cancelAll();
     if (minutesBefore <= 0) return;
@@ -74,6 +81,7 @@ class NotificationService {
   }
 
   Future<void> scheduleCustomEvents(List<CustomEvent> events) async {
+    if (!supportsScheduledNotifications()) return;
     await initialize();
     for (var id = 1000; id < 1100; id++) {
       await _plugin.cancel(id: id);

@@ -19,14 +19,19 @@ CourseTable 可以导入学校易班导出的旧版 `.xls` 课表文件，自动
 - 浅色、深色和跟随系统主题
 - 导入本地图片作为背景，并调节背景可见度
 - 本地保存数据，无账号、无云同步
+- GitHub Actions 云端构建安卓、Windows 和未签名 iOS 版本
 
 ## 下载安装
 
-前往 [Releases](https://github.com/dfsjiv/course-table/releases/latest)，下载：
+前往 [Releases](https://github.com/dfsjiv/course-table/releases/latest)，按平台下载：
 
-`app-arm64-v8a-release.apk`
+- 安卓：`app-arm64-v8a-release.apk`
+- Windows：`course-table-windows-x64.zip`，解压后运行 `course_table.exe`
+- iOS：`course-table-ios-unsigned.zip`
 
-下载完成后，在安卓手机上打开 APK 并允许安装未知来源应用。
+安卓下载完成后，打开 APK 并允许安装未知来源应用。
+
+iOS 压缩包是未签名构建产物，普通 iPhone 无法直接安装，需要苹果开发者账号和签名证书。
 
 ## 使用方法
 
