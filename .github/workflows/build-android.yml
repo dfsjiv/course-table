@@ -24,7 +24,9 @@ jobs:
           targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
 
       - name: Generate Android project
-        run: flutter create --platforms=android --org cn.hieu --project-name course_table .
+        run: |
+          flutter create --platforms=android --org cn.hieu --project-name course_table .
+          rm -f test/widget_test.dart
 
       - name: Install dependencies
         run: flutter pub get
@@ -55,4 +57,3 @@ jobs:
           name: course-table-apk
           path: build/app/outputs/flutter-apk/*.apk
           if-no-files-found: error
-
