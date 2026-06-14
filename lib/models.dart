@@ -78,6 +78,21 @@ class Timetable {
   List<Course> coursesForWeek(int week) =>
       courses.where((course) => course.weeks.contains(week)).toList();
 
+  List<Course> coursesForDate(DateTime date) {
+    final week = weekFor(date);
+    return courses
+        .where((course) =>
+            course.weekday == date.weekday && course.weeks.contains(week))
+        .toList()
+      ..sort((a, b) => a.startPeriod.compareTo(b.startPeriod));
+  }
+
+  DateTime? dateFor(int week, int weekday) {
+    if (startDate == null) return null;
+    return DateTime(startDate!.year, startDate!.month, startDate!.day)
+        .add(Duration(days: (week - 1) * 7 + weekday - 1));
+  }
+
   int weekFor(DateTime date) {
     if (startDate == null) return 1;
     final day = DateTime(date.year, date.month, date.day);
@@ -85,4 +100,3 @@ class Timetable {
     return (day.difference(first).inDays ~/ 7 + 1).clamp(1, totalWeeks);
   }
 }
-

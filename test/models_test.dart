@@ -30,4 +30,14 @@ void main() {
     expect(timetable.weekFor(DateTime(2026, 6, 8)), 15);
     expect(timetable.weekFor(DateTime(2027, 1, 1)), 20);
   });
+
+  test('filters courses by date using its teaching week and weekday', () {
+    expect(timetable.coursesForDate(DateTime(2026, 3, 4)), [course]);
+    expect(timetable.coursesForDate(DateTime(2026, 3, 5)), isEmpty);
+  });
+
+  test('returns the date for a teaching week and weekday', () {
+    expect(timetable.dateFor(15, 1), DateTime(2026, 6, 8));
+    expect(timetable.dateFor(15, 7), DateTime(2026, 6, 14));
+  });
 }
