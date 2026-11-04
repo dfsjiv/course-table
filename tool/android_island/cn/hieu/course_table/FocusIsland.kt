@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
+import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -49,11 +50,12 @@ object FocusIsland {
     private const val HIGHLIGHT_COLOR = "#2563EB"
 
     /**
-     * Key of a big/small island text block. The official guide spells it
-     * `miui.focus.paramtextInfo`; it lives in one place because the exact key
-     * depends on the chosen template and may need correcting after testing.
+     * Pictures the payload refers to travel in a separate extras bundle,
+     * keyed by name. The island templates need a picture: without one the
+     * small island has nothing to draw and SystemUI drops the island.
      */
-    private const val PARAM_TEXT_INFO = "miui.focus.paramtextInfo"
+    private const val PICS_KEY = "miui.focus.pics"
+    private const val PIC_ICON = "miui.focus.pic_course"
 
     /** Everything the notification and the island need, already formatted. */
     data class Content(
@@ -127,6 +129,10 @@ object FocusIsland {
             put("content", content.detail)
             put("useHighLight", true)
         }
+        val picInfo = JSONObject().apply {
+            put("type", 1)
+            put("pic", PIC_ICON)
+        }
         val island = JSONObject().apply {
             put("islandProperty", 1)
             put("islandTimeout", 3 * 60 * 60)
@@ -138,23 +144,16 @@ object FocusIsland {
                         "imageTextInfoLeft",
                         JSONObject().apply {
                             put("type", 1)
-                            put(PARAM_TEXT_INFO, textInfo)
+                            put("picInfo", picInfo)
+                            put("textInfo", textInfo)
                         },
                     )
                 },
             )
-            // 小岛（摘要态）
+            // 小岛（摘要态）：只放图标，文字由大岛展开时显示
             put(
                 "smallIslandArea",
-                JSONObject().apply {
-                    put(
-                        PARAM_TEXT_INFO,
-                        JSONObject().apply {
-                            put("title", content.highlight)
-                            put("useHighLight", true)
-                        },
-                    )
-                },
+                JSONObject().apply { put("picInfo", picInfo) },
             )
         }
         val payload = JSONObject().apply {
@@ -223,6 +222,12 @@ object FocusIsland {
             .setShowWhen(false)
             .build()
         notification.extras.putString(PARAM_KEY, payload)
+        notification.extras.putBundle(
+            PICS_KEY,
+            Bundle().apply {
+                putParcelable(PIC_ICON, Icon.createWithResource(context, smallIcon(context)))
+            },
+        )
         manager.notify(NOTIFICATION_ID, notification)
     }
 

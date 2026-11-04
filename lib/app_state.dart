@@ -10,6 +10,7 @@ import 'notification_service.dart';
 import 'plan.dart';
 import 'reminders.dart';
 import 'storage.dart';
+import 'user_font.dart';
 import 'xls_parser.dart';
 
 /// Everything the app shows, loaded once and persisted on every change.
@@ -34,6 +35,11 @@ class AppState extends ChangeNotifier {
 
   Future<void> load() async {
     appearance = await _storage.loadAppearance();
+    final family = appearance.fontFamily;
+    if (family != null && !await loadUserFont(family, appearance.fontPath!)) {
+      // The font file is gone (app data cleared, file corrupt): fall back.
+      appearance = appearance.copyWith(removeFont: true);
+    }
     timetable = await _storage.load();
     applySchedule(timetable);
     reminderMinutes = await _storage.loadReminderMinutes();
@@ -174,10 +180,17 @@ class AppState extends ChangeNotifier {
     await _notifications.scheduleReflection(value);
   }
 
-  Future<void> setAppearance(AppearanceSettings value) async {
+  /// Returns false when [value] names a font file that cannot be loaded; the
+  /// settings are left unchanged then.
+  Future<bool> setAppearance(AppearanceSettings value) async {
+    final family = value.fontFamily;
+    if (family != null && !await loadUserFont(family, value.fontPath!)) {
+      return false;
+    }
     appearance = value;
     notifyListeners();
     await _storage.saveAppearance(value);
+    return true;
   }
 
   Future<void> setShowOtherWeeks(bool value) async {

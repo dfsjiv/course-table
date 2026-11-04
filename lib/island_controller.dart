@@ -89,6 +89,19 @@ class IslandController {
     await _channel.invokeMethod<void>('startIsland');
   }
 
+  /// Restarts the service on launch when the user turned the island on: the
+  /// system may have killed it (battery saver, swipe from recents, update),
+  /// and nothing else would bring it back until the next reboot.
+  Future<void> resumeIfEnabled() async {
+    if (!await isEnabled()) return;
+    try {
+      await _channel.invokeMethod<void>('startIsland');
+    } on PlatformException {
+      // Android refuses background starts in some states; the next launch or
+      // toggle will try again.
+    }
+  }
+
   Future<void> stop() async {
     if (!Platform.isAndroid) return;
     await (await SharedPreferences.getInstance()).setBool(_enabledKey, false);
@@ -99,6 +112,10 @@ class IslandController {
   /// No-op when the island is disabled.
   Future<void> refresh() async {
     if (!Platform.isAndroid || !await isEnabled()) return;
-    await _channel.invokeMethod<void>('refreshIsland');
+    try {
+      await _channel.invokeMethod<void>('refreshIsland');
+    } on PlatformException {
+      // The service is not running; it reloads the timetable when it starts.
+    }
   }
 }

@@ -1,31 +1,123 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_miuix/miuix.dart';
 
-/// HIANA brand colors layered on top of the miuix color scheme.
+import '../theme_palette.dart';
+import 'glass.dart';
+
+/// Brand colors, derived from the palette picked in 设置 › 外观 (the same
+/// palettes as the 海纳协会 website, see theme_palette.dart).
+///
+/// [use] is called by the app root on every rebuild, before anything below
+/// it builds, so plain getters are enough here.
 class Brand {
-  static const accent = Color(0xFFF26B1D);
-  static const hero = Color(0xFFC2410F);
+  static AppPalette palette = builtInPalettes.first;
+  static bool _dark = false;
 
-  static Color accentText(bool dark) =>
-      dark ? const Color(0xFFFF9A5C) : const Color(0xFF9C3A08);
+  static void use(AppPalette value, bool dark) {
+    palette = value;
+    _dark = dark;
+  }
 
-  static Color tint(bool dark) => dark
-      ? const Color(0x2EFF7A2E) // 18%
-      : const Color(0x1FF26B1D); // 12%
+  static ThemeBase base(bool dark) => palette.of(dark);
 
-  /// Fill and text for a 里课 card in the grid.
-  static Color planFill(bool dark) =>
-      dark ? const Color(0xFF4A2410) : const Color(0xFFFFE6D5);
-  static Color planInk(bool dark) =>
-      dark ? const Color(0xFFFFB98A) : const Color(0xFF8F3508);
+  static final _cache = <(AppPalette, bool), _Derived>{};
 
-  static MiuixColors light() => lightColorScheme().copy(
-    primary: const Color(0xFFE2601F),
-    onSurface: const Color(0xFF1A1A1A),
-  );
+  /// Text colors adjusted so they stay readable on every surface the app
+  /// draws (each glass kind over each gradient stop, plain and tinted).
+  static _Derived _derived(bool dark) =>
+      _cache.putIfAbsent((palette, dark), () {
+        final b = base(dark);
+        final surfaces = [
+          for (final kind in GlassKind.values)
+            for (final stop in ambientStops(dark))
+              over(glassFill(kind, dark), stop),
+          b.surface,
+          b.bg,
+        ];
+        final tint = b.accent.withValues(alpha: dark ? 0.18 : 0.14);
+        final tinted = [for (final s in surfaces) over(tint, s)];
+        final ink = ensureContrast(b.ink, [...surfaces, ...tinted], 7.2);
+        final plan = mix(b.surface, b.accent, dark ? 0.28 : 0.2);
+        return _Derived(
+          ink: ink,
+          secondary: ensureContrast(mix(b.ink, b.bg, 0.34), [
+            ...surfaces,
+            ...tinted,
+          ], 4.7),
+          text: ensureContrast(b.text, [...surfaces, ...tinted], 4.7),
+          planFill: plan,
+          planInk: ensureContrast(b.text, [plan], 4.7),
+        );
+      });
 
-  static MiuixColors dark() =>
-      darkColorScheme().copy(primary: const Color(0xFFE2601F));
+  static Color inkOf(bool dark) => _derived(dark).ink;
+  static Color secondaryOf(bool dark) => _derived(dark).secondary;
+
+  /// Accent for lines, bars and borders.
+  static Color get accent => base(_dark).accent;
+
+  /// A deep accent that carries white text (the "now" card, today's date).
+  static Color get hero => heroOf(_dark);
+  static Color heroOf(bool dark) {
+    final b = base(dark);
+    return deepen(b.accent, toward: dark ? const Color(0xFF000000) : b.ink);
+  }
+
+  /// Primary button fill and its text.
+  static Color get cta => base(_dark).cta;
+  static Color get ctaInk => base(_dark).ctaInk;
+
+  static Color accentText(bool dark) => _derived(dark).text;
+
+  static Color tint(bool dark) =>
+      base(dark).accent.withValues(alpha: dark ? 0.18 : 0.14);
+
+  /// Fill and text for a 自学 card in the grid.
+  static Color planFill(bool dark) => _derived(dark).planFill;
+  static Color planInk(bool dark) => _derived(dark).planInk;
+
+  static MiuixColors light() => _scheme(lightColorScheme(), false);
+  static MiuixColors dark() => _scheme(darkColorScheme(), true);
+
+  static MiuixColors _scheme(MiuixColors from, bool dark) {
+    final b = base(dark);
+    final primary = dark ? b.accent : heroOf(false);
+    final secondary = secondaryOf(dark);
+    final ink = inkOf(dark);
+    return from.copy(
+      primary: primary,
+      onPrimary: inkOn(primary),
+      background: b.bg,
+      onBackground: ink,
+      surface: b.bg,
+      onSurface: ink,
+      surfaceContainer: b.surface,
+      onSurfaceContainer: ink,
+      surfaceVariant: b.surface,
+      onSurfaceSecondary: secondary,
+      onSurfaceVariantSummary: secondary,
+      onBackgroundVariant: secondary,
+      secondaryContainer: mix(b.surface, b.ink, dark ? 0.1 : 0.06),
+      onSecondaryContainer: secondary,
+      dividerLine: b.ink.withValues(alpha: 0.1),
+    );
+  }
+}
+
+class _Derived {
+  const _Derived({
+    required this.ink,
+    required this.secondary,
+    required this.text,
+    required this.planFill,
+    required this.planInk,
+  });
+
+  final Color ink;
+  final Color secondary;
+  final Color text;
+  final Color planFill;
+  final Color planInk;
 }
 
 /// Pastel course colors, each a (fill, ink) pair per brightness.
@@ -63,7 +155,8 @@ class CoursePalette {
   }
 }
 
-/// The type scale from the design spec: one family (system MiSans), three
+/// The type scale from the design spec: one family (system MiSans or the
+/// font picked in 设置 › 外观), three
 /// weights (400 / 500 / 600), nine sizes, 11 at the smallest. Digits are always tabular.
 class TypeScale {
   static const _tabular = [FontFeature.tabularFigures()];
@@ -103,10 +196,8 @@ class Palette {
   final MiuixColors colors;
   final bool dark;
 
-  static Color inkOf(bool dark) =>
-      dark ? const Color(0xFFEDEDED) : const Color(0xFF1A1A1A);
-  static Color secondaryOf(bool dark) =>
-      dark ? const Color(0xFF9A9A9F) : const Color(0xFF5C5C61);
+  static Color inkOf(bool dark) => Brand.inkOf(dark);
+  static Color secondaryOf(bool dark) => Brand.secondaryOf(dark);
 
   Color get ink => inkOf(dark);
   Color get secondary => secondaryOf(dark);
@@ -115,10 +206,15 @@ class Palette {
   Color get line => colors.dividerLine;
   Color get accentText => Brand.accentText(dark);
   Color get tint => Brand.tint(dark);
-  Color get ghostFill =>
-      dark ? const Color(0xFF2A2A2C) : const Color(0xFFEFEFF1);
-  Color get ghostInk =>
-      dark ? const Color(0xFF8E8E93) : const Color(0xFF8E8E93);
+  Color get ghostFill {
+    final b = Brand.base(dark);
+    return mix(b.surface, b.ink, dark ? 0.1 : 0.06);
+  }
+
+  Color get ghostInk {
+    final b = Brand.base(dark);
+    return mix(b.ink, b.bg, 0.5);
+  }
 }
 
 const weekdayNames = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];

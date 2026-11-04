@@ -483,19 +483,9 @@ class _EventEditorState extends State<EventEditor> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        MiuixTextField(
-          controller: _title,
-          label: '名称，比如「社团例会」',
-          useLabelAsPlaceholder: true,
-          singleLine: true,
-        ),
+        AppTextField(controller: _title, hint: '名称，比如「社团例会」', singleLine: true),
         const SizedBox(height: 12),
-        MiuixTextField(
-          controller: _location,
-          label: '地点（可不填）',
-          useLabelAsPlaceholder: true,
-          singleLine: true,
-        ),
+        AppTextField(controller: _location, hint: '地点（可不填）', singleLine: true),
         const SizedBox(height: 8),
         MiuixArrowPreference(
           title: '日期',

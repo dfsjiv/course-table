@@ -89,6 +89,8 @@ class IslandUpNext extends IslandState {
 }
 
 IslandState? islandState(Timetable timetable, DateTime now) {
+  // Mirrors IslandService.kt: no start date, no island.
+  if (timetable.startDate == null) return null;
   final current = currentCourse(timetable, now);
   if (current != null) return IslandInClass(current);
   final tomorrow = DateTime(

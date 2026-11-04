@@ -153,6 +153,7 @@ class _TodayPageState extends State<TodayPage> {
     final rows = _agenda(table, state.plans, state.events, today);
     final courseCount = rows.where((row) => row.course != null).length;
     final planCount = rows.where((row) => row.plan != null).length;
+    final eventCount = rows.where((row) => row.event != null).length;
     final meta = [
       if (table != null) weekText(table, today),
       dateLabel(today),
@@ -189,7 +190,11 @@ class _TodayPageState extends State<TodayPage> {
                   icon: AppIcons.timetable,
                   rows.isEmpty
                       ? '今天没有安排'
-                      : '今天 $courseCount 门课 · $planCount 个自学',
+                      : [
+                          if (courseCount > 0) '$courseCount 门课',
+                          if (planCount > 0) '$planCount 个自学',
+                          if (eventCount > 0) '$eventCount 个事件',
+                        ].join(' · '),
                 ),
                 if (rows.isNotEmpty)
                   PageCard(
@@ -220,7 +225,7 @@ class _TodayPageState extends State<TodayPage> {
                         const SizedBox(width: 16),
                         Expanded(
                           child: Text(
-                            '今天没课。去「课表」看看这周，或者在「自学」里给空课排点东西。',
+                            '今天没有课，也没有自学和事件。点这里看整周课表。',
                             style: TypeScale.secondary.copyWith(
                               color: palette.secondary,
                             ),
@@ -379,14 +384,16 @@ class _NowCardState extends State<_NowCard> {
     String footerRight;
     if (current != null || next != null) {
       final row = (current ?? next)!;
-      title = row.course?.name ?? row.event?.title ?? '空课';
+      title = row.course?.name ?? row.event?.title ?? row.plan!.title;
       place = row.course == null
           ? row.event?.location
           : [
               row.course!.room,
               row.course!.teacher,
             ].where((part) => part.isNotEmpty).join(' · ');
-      inner = row.plan;
+      // The chip names what is studied inside a class; a plan on its own
+      // is already the title.
+      inner = row.course != null || row.event != null ? row.plan : null;
       time = '${clockText(row.start)}–${clockText(row.end)}';
       final periods = row.course != null
           ? '第 ${row.course!.startPeriod}–${row.course!.endPeriod} 节'
@@ -411,22 +418,24 @@ class _NowCardState extends State<_NowCard> {
       }
     } else {
       final upcoming = nextUp(widget.table, widget.events, _now);
+      // Only say "today's classes are over" when there were some.
+      final dayBadge = widget.rows.isEmpty ? '今天没课' : '今天的课都结束了';
       if (upcoming == null) {
-        badge = '今天的课都结束了';
+        badge = dayBadge;
         badgeIcon = AppIcons.moon;
-        title = '好好休息';
+        title = '本学期没有更多课了';
         time = '';
         footerLeft = '';
         footerRight = '';
       } else {
-        badge = '今天的课都结束了';
+        badge = dayBadge;
         badgeIcon = AppIcons.moon;
         title = upcoming.title;
         place = upcoming.location;
         time =
             '${_dayWord(upcoming.start)} '
             '${clockText(upcoming.start.hour * 60 + upcoming.start.minute)}';
-        footerLeft = '下一节';
+        footerLeft = '下一项';
         footerRight = _waitText(upcoming.start.difference(_now));
       }
     }
@@ -439,9 +448,9 @@ class _NowCardState extends State<_NowCard> {
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(24),
-          boxShadow: const [
+          boxShadow: [
             BoxShadow(
-              color: Color(0x2EC2410F),
+              color: Brand.hero.withValues(alpha: 0.18),
               blurRadius: 32,
               offset: Offset(0, 8),
             ),
@@ -527,7 +536,7 @@ class _NowCardState extends State<_NowCard> {
                           color: white,
                           shape: MiuixSquircleBorder(cornerRadius: 8),
                         ),
-                        child: const AppIcon(
+                        child: AppIcon(
                           AppIcons.study,
                           size: 17,
                           color: Brand.hero,
@@ -640,7 +649,7 @@ class _AgendaTile extends StatelessWidget {
       period = '${row.plan!.startPeriod}–${row.plan!.endPeriod} 节';
       details.add((
         AppIcons.book,
-        ['空课', if (row.plan!.group.isNotEmpty) row.plan!.group].join(' · '),
+        row.plan!.group.isNotEmpty ? row.plan!.group : '自学',
       ));
     }
     final titleColor = past ? palette.secondary : palette.ink;

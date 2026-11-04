@@ -285,7 +285,7 @@ class _WeekPicker extends StatelessWidget {
                   shape: MiuixSquircleBorder(
                     cornerRadius: 14,
                     side: week == current && week != selected
-                        ? const BorderSide(color: Brand.accent, width: 1.5)
+                        ? BorderSide(color: Brand.accent, width: 1.5)
                         : BorderSide.none,
                   ),
                 ),

@@ -6,6 +6,7 @@ import 'appearance.dart';
 import 'custom_event.dart';
 import 'models.dart';
 import 'plan.dart';
+import 'theme_palette.dart';
 
 class TimetableStorage {
   static const _key = 'timetable';
@@ -18,6 +19,10 @@ class TimetableStorage {
   static const _journalKey = 'journal';
   static const _reflectionKey = 'reflection';
   static const _showOtherWeeksKey = 'showOtherWeeks';
+  static const _paletteKey = 'palette';
+  static const _customPaletteKey = 'customPalette';
+  static const _fontPathKey = 'fontPath';
+  static const _fontNameKey = 'fontName';
 
   Future<Timetable?> load() async {
     final value = (await SharedPreferences.getInstance()).getString(_key);
@@ -97,7 +102,34 @@ class TimetableStorage {
       ),
       backgroundPath: preferences.getString(_backgroundKey),
       backgroundOpacity: preferences.getDouble(_backgroundOpacityKey) ?? 0.25,
+      paletteId: preferences.getString(_paletteKey) ?? defaultPaletteId,
+      customPalette: _decodePalette(preferences.getString(_customPaletteKey)),
+      fontPath: preferences.getString(_fontPathKey),
+      fontName: preferences.getString(_fontNameKey),
     );
+  }
+
+  static AppPalette? _decodePalette(String? value) {
+    if (value == null) return null;
+    try {
+      return AppPalette.fromJson(
+        (jsonDecode(value) as Map).cast<String, Object?>(),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> _setOrRemove(
+    SharedPreferences preferences,
+    String key,
+    String? value,
+  ) async {
+    if (value == null) {
+      await preferences.remove(key);
+    } else {
+      await preferences.setString(key, value);
+    }
   }
 
   Future<void> saveAppearance(AppearanceSettings appearance) async {
@@ -112,6 +144,16 @@ class TimetableStorage {
       _backgroundOpacityKey,
       appearance.backgroundOpacity,
     );
+    await preferences.setString(_paletteKey, appearance.paletteId);
+    await _setOrRemove(
+      preferences,
+      _customPaletteKey,
+      appearance.customPalette == null
+          ? null
+          : jsonEncode(appearance.customPalette!.toJson()),
+    );
+    await _setOrRemove(preferences, _fontPathKey, appearance.fontPath);
+    await _setOrRemove(preferences, _fontNameKey, appearance.fontName);
   }
 
   Future<List<T>> _loadList<T>(

@@ -105,7 +105,10 @@ class NotificationService {
     for (var id = 1; id <= 100; id++) {
       await _plugin.cancel(id: id);
     }
-    if (minutesBefore <= 0) return;
+    // Without a start date the week is unknown and every course would be
+    // treated as "week 1" forever, so reminders would fire for classes that
+    // are not on (every odd/even-week and late-start course, every week).
+    if (minutesBefore <= 0 || timetable.startDate == null) return;
     final now = DateTime.now();
     final courses = futureCourses(timetable, now, limit: 100);
     for (var index = 0; index < courses.length; index++) {
