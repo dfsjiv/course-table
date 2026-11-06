@@ -151,7 +151,7 @@ class SemesterPage extends StatelessWidget {
                 Row(
                   children: [
                     _Legend(color: _biao(palette.dark), label: '表课'),
-                    const _Legend(color: Brand.accent, label: '自学'),
+                    _Legend(color: Brand.accent, label: '自学'),
                     _Legend(color: palette.colors.error, label: '事件'),
                     const Spacer(),
                     Text(

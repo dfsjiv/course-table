@@ -286,17 +286,15 @@ class _PlanPageState extends State<PlanPage> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                MiuixTextField(
+                AppTextField(
                   controller: _group,
-                  label: '属于哪门自学课，比如 MIT 16.01',
-                  useLabelAsPlaceholder: true,
+                  hint: '课程名，比如 MIT 16.01',
                   singleLine: true,
                 ),
                 const SizedBox(height: 12),
-                MiuixTextField(
+                AppTextField(
                   controller: _title,
-                  label: '第 1 讲：导论\n第 2 讲：静力学\nPSet 1',
-                  useLabelAsPlaceholder: true,
+                  hint: '第 1 讲：导论\n第 2 讲：静力学\nPSet 1',
                   minLines: 3,
                   maxLines: 8,
                 ),
@@ -497,7 +495,7 @@ class _SlotGrid extends StatelessWidget {
               shape: MiuixSquircleBorder(
                 cornerRadius: 8,
                 side: hovering
-                    ? const BorderSide(color: Brand.accent, width: 2)
+                    ? BorderSide(color: Brand.accent, width: 2)
                     : BorderSide.none,
               ),
             ),
@@ -592,9 +590,9 @@ class _DragFeedback extends StatelessWidget {
         decoration: ShapeDecoration(
           color: Brand.hero,
           shape: MiuixSquircleBorder(cornerRadius: 12),
-          shadows: const [
+          shadows: [
             BoxShadow(
-              color: Color(0x59C2410F),
+              color: Brand.hero.withValues(alpha: 0.35),
               blurRadius: 30,
               offset: Offset(0, 14),
             ),

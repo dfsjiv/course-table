@@ -289,7 +289,7 @@ class WeekGrid extends StatelessWidget {
             end: plan.endPeriod!,
             child: _CourseBlock(
               title: plan.title,
-              subtitle: under.isEmpty ? '空课' : '原：${under.first.name}',
+              subtitle: under.isEmpty ? null : '原：${under.first.name}',
               fill: Brand.planFill(palette.dark),
               ink: Brand.planInk(palette.dark),
               dashed: under.isEmpty,
@@ -320,7 +320,7 @@ class WeekGrid extends StatelessWidget {
                 Container(
                   width: 6,
                   height: 6,
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     color: Brand.accent,
                     shape: BoxShape.circle,
                   ),

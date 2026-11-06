@@ -71,6 +71,18 @@ class _AppShellState extends State<AppShell> {
     _weekPage.currentState?.jumpToWeek(week);
   }
 
+  String? _checkedBackground;
+  bool _backgroundFound = false;
+
+  /// File I/O once per picture, not on every rebuild.
+  bool _backgroundExists(String path) {
+    if (path != _checkedBackground) {
+      _checkedBackground = path;
+      _backgroundFound = File(path).existsSync();
+    }
+    return _backgroundFound;
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
@@ -119,22 +131,32 @@ class _AppShellState extends State<AppShell> {
           final media = MediaQuery.of(context);
           return MiuixLayerBackdropCapture(
             backdrop: _backdrop,
+            // The capture snapshots the whole page with toImageSync after
+            // every frame that changes it (each scroll frame, each countdown
+            // tick). At the device ratio (3x) that is a full-resolution copy
+            // of the screen per frame, which is what made scrolling stutter.
+            // The bar blurs the snapshot heavily, so 1x looks the same at a
+            // ninth of the pixels.
+            pixelRatio: 1,
             child: Stack(
               fit: StackFit.expand,
               children: [
                 const AmbientBackground(),
-                if (background != null && File(background).existsSync()) ...[
-                  Image.file(File(background), fit: BoxFit.cover),
+                if (background != null && _backgroundExists(background)) ...[
+                  // Decode at screen size: a camera photo decoded at full
+                  // resolution costs tens of MB and slows every frame.
+                  Image.file(
+                    File(background),
+                    fit: BoxFit.cover,
+                    cacheHeight: (media.size.height * media.devicePixelRatio)
+                        .round(),
+                  ),
                   // A wash keeps text readable on any wallpaper; the
                   // "visibility" setting decides how much picture shows.
                   ColoredBox(
-                    color:
-                        (palette.dark
-                                ? const Color(0xFF000000)
-                                : const Color(0xFFFAFAFA))
-                            .withValues(
-                              alpha: 1 - state.appearance.backgroundOpacity,
-                            ),
+                    color: Brand.base(palette.dark).bg.withValues(
+                      alpha: 1 - state.appearance.backgroundOpacity,
+                    ),
                   ),
                 ],
                 MediaQuery(

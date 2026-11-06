@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:course_table/theme_palette.dart' hide contrast;
 import 'package:course_table/ui/glass.dart';
 import 'package:course_table/ui/tokens.dart';
 import 'package:flutter/painting.dart';
@@ -21,21 +22,31 @@ double contrast(Color a, Color b) {
 }
 
 void main() {
+  for (final palette in builtInPalettes) {
+    group(palette.label, () {
+      setUp(() => Brand.palette = palette);
+      _checks();
+    });
+  }
+}
+
+void _checks() {
   // Text sits on glass, glass sits somewhere on the ambient gradient: check
   // every gradient stop so no part of the screen falls below WCAG AA.
   for (final dark in [false, true]) {
     final mode = dark ? 'dark' : 'light';
     for (final kind in GlassKind.values) {
-      for (final stop in ambientStops(dark)) {
-        final surface = over(glassFill(kind, dark), stop);
-        test('$mode ${kind.name} glass over $stop', () {
+      for (var i = 0; i < 4; i++) {
+        test('$mode ${kind.name} glass over gradient stop $i', () {
+          final surface = over(glassFill(kind, dark), ambientStops(dark)[i]);
           expect(contrast(Palette.inkOf(dark), surface), greaterThan(7));
           expect(
             contrast(Palette.secondaryOf(dark), surface),
             greaterThanOrEqualTo(4.5),
           );
         });
-        test('$mode accent text on tinted ${kind.name} glass over $stop', () {
+        test('$mode accent text on tinted ${kind.name} glass $i', () {
+          final surface = over(glassFill(kind, dark), ambientStops(dark)[i]);
           final tinted = over(Brand.tint(dark), surface);
           expect(
             contrast(Brand.accentText(dark), tinted),
@@ -47,6 +58,7 @@ void main() {
   }
 
   test('white text on the hero card and its badge', () {
+    Brand.use(Brand.palette, false);
     const white = Color(0xFFFFFFFF);
     expect(contrast(white, Brand.hero), greaterThanOrEqualTo(4.5));
     expect(

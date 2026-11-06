@@ -150,7 +150,10 @@ class IslandService : Service() {
             .setContentIntent(pending)
             .setOngoing(true)
             .build()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        // FOREGROUND_SERVICE_TYPE_SPECIAL_USE only exists from Android 14.
+        // Passing it on 10–13 throws (the manifest type is unknown there and
+        // reads as none), which killed the service before the island showed.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(
                 NOTIFICATION_ID,
                 notification,
@@ -213,7 +216,9 @@ class IslandService : Service() {
     // ---- scheduling logic (mirrors lib/reminders.dart islandState) ----
 
     private fun weekFor(date: Calendar, table: Timetable): Int {
-        val start = table.startDateMillis ?: return 1
+        // No start date: the week is unknown, so show nothing rather than
+        // treating every day as week 1 (mirrors notification_service.dart).
+        val start = table.startDateMillis ?: return 0
         val dayStart = startOfDay(date.timeInMillis)
         val diffDays = ((dayStart - start) / 86_400_000L).toInt()
         // Unclamped: outside the semester no week matches, so no courses show.
@@ -266,24 +271,17 @@ class IslandService : Service() {
     private fun periodRange(course: Course): String =
         "第${course.startPeriod}-${course.endPeriod}节"
 
-    private fun clock(seconds: Long): String {
-        val total = seconds.coerceAtLeast(0)
-        return String.format(
-            Locale.US,
-            "%02d:%02d:%02d",
-            total / 3600,
-            total % 3600 / 60,
-            total % 60,
-        )
-    }
-
-    /** The island lays text out in small blocks, so keep this short. */
+    /**
+     * The island lays text out in small blocks, so keep this short. Minute
+     * precision (rounded up) on purpose: the payload then changes once a
+     * minute instead of every second, so SystemUI is not asked to re-render
+     * (and re-animate) the island 60 times a minute.
+     */
     private fun compact(seconds: Long): String {
-        val total = seconds.coerceAtLeast(0)
+        val minutes = ((seconds.coerceAtLeast(0) + 59) / 60)
         return when {
-            total >= 3600 -> "${total / 3600}小时${total % 3600 / 60}分"
-            total >= 60 -> "${total / 60}分钟"
-            else -> "${total}秒"
+            minutes >= 60 -> "${minutes / 60}小时${minutes % 60}分"
+            else -> "${minutes.coerceAtLeast(1)}分钟"
         }
     }
 
@@ -306,8 +304,8 @@ class IslandService : Service() {
             val place = course.room.ifEmpty { periodRange(course) }
             FocusIsland.Content(
                 title = course.name,
-                summary = "${periodRange(course)} · $place · ${clock(state.secondsLeft)}后开始",
-                ticker = "下一节 · ${course.name} · ${clock(state.secondsLeft)}",
+                summary = "${periodRange(course)} · $place · ${compact(state.secondsLeft)}后开始",
+                ticker = "下一节 · ${course.name} · ${compact(state.secondsLeft)}后",
                 frontTitle = "下一节",
                 highlight = compact(state.secondsLeft),
                 detail = place,

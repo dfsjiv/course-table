@@ -421,15 +421,9 @@ class PrimaryButton extends StatelessWidget {
     label: text,
     onPressed: onPressed,
     expand: expand,
-    color: Brand.hero,
     icon: icon == null
         ? null
-        : AppIcon(
-            icon!,
-            size: 19,
-            color: const Color(0xFFFFFFFF),
-            strokeWidth: 2,
-          ),
+        : AppIcon(icon!, size: 19, color: Brand.ctaInk, strokeWidth: 2),
   );
 }
 
@@ -521,4 +515,71 @@ class _ChevronDown extends CustomPainter {
 
   @override
   bool shouldRepaint(_ChevronDown old) => old.color != color;
+}
+
+/// The one text field the app uses.
+///
+/// Wraps [MiuixTextField] with two fixes for overlapping text on devices:
+///  - the hint is always a placeholder that disappears once there is text.
+///    miuix' floating label is drawn 10 px above the first line inside the
+///    same 16 px padding; with MiSans' tall line metrics (and with Chinese
+///    IME composing text) it lands on top of what is typed.
+///  - an explicit line height with even leading, so CJK and Latin glyphs
+///    (which come from different fallback fonts with different ascents) sit
+///    on one baseline and multi-line text never overlaps the line above.
+class AppTextField extends StatelessWidget {
+  const AppTextField({
+    super.key,
+    required this.controller,
+    required this.hint,
+    this.singleLine = false,
+    this.minLines,
+    this.maxLines,
+    this.textStyle,
+    this.colors,
+    this.autofocus = false,
+  });
+
+  final TextEditingController controller;
+  final String hint;
+  final bool singleLine;
+  final int? minLines;
+  final int? maxLines;
+  final TextStyle? textStyle;
+  final MiuixTextFieldColors? colors;
+  final bool autofocus;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = Palette(context);
+    final field = MiuixTextField(
+      controller: controller,
+      label: hint,
+      useLabelAsPlaceholder: true,
+      singleLine: singleLine,
+      minLines: singleLine ? null : minLines,
+      maxLines: singleLine ? 1 : maxLines,
+      autofocus: autofocus,
+      colors: colors,
+      textStyle: (textStyle ?? TextStyle(color: palette.ink)).merge(
+        const TextStyle(
+          // Same size as the miuix placeholder, so nothing jumps when the
+          // first character replaces it.
+          fontSize: 17,
+          height: 24 / 17,
+          leadingDistribution: TextLeadingDistribution.even,
+          letterSpacing: 0,
+        ),
+      ),
+    );
+    // MiuixTextField always paints its text in onBackground and ignores the
+    // color in textStyle, so a custom color needs a theme override.
+    final ink = textStyle?.color;
+    if (ink == null) return field;
+    final theme = MiuixTheme.of(context);
+    return MiuixTheme(
+      data: theme.copyWith(colors: theme.colors.copy(onBackground: ink)),
+      child: field,
+    );
+  }
 }

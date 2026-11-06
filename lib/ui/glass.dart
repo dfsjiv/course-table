@@ -4,7 +4,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_miuix/miuix.dart';
 
+import '../theme_palette.dart';
 import 'icons.dart';
+import 'tokens.dart';
 
 /// Glass over a static ambient background (after Listenly 3.0's liquid
 /// glass). Because the background is a smooth gradient, a translucent fill
@@ -26,50 +28,66 @@ class _GlassSpec {
   final BoxShadow shadow;
 }
 
-/// The ambient gradient's color stops (at 0, .36, .66, 1).
-List<Color> ambientStops(bool dark) => dark
-    ? const [
-        Color(0xFF1B120D),
-        Color(0xFF231712),
-        Color(0xFF171A1A),
-        Color(0xFF0F1312),
-      ]
-    : const [
-        Color(0xFFF4E6D8),
-        Color(0xFFEBD9CB),
-        Color(0xFFE7E2D6),
-        Color(0xFFD8DFD5),
-      ];
+/// The ambient gradient's color stops (at 0, .36, .66, 1), from the palette.
+List<Color> ambientStops(bool dark) {
+  final b = Brand.base(dark);
+  return [
+    mix(b.bg, b.accent, dark ? 0.12 : 0.14),
+    mix(b.bg, b.accent, dark ? 0.05 : 0.06),
+    b.bg,
+    mix(b.bg, b.ink, dark ? 0.03 : 0.04),
+  ];
+}
 
 /// The fill a glass surface lays over the background (for contrast checks).
 Color glassFill(GlassKind kind, bool dark) => _spec(kind, dark).fill;
 
-_GlassSpec _spec(GlassKind kind, bool dark) => switch ((kind, dark)) {
-  (GlassKind.regular, false) => const _GlassSpec(
-    Color(0x94FFFFFF), // 58 %
-    Color(0xD9FFFFFF),
-    Color(0x52FFFFFF),
-    BoxShadow(color: Color(0x1A5A280A), blurRadius: 30, offset: Offset(0, 10)),
-  ),
-  (GlassKind.clear, false) => const _GlassSpec(
-    Color(0x57FFFFFF), // 34 %
-    Color(0xF2FFFFFF),
-    Color(0x8CFFFFFF),
-    BoxShadow(color: Color(0x241E323C), blurRadius: 24, offset: Offset(0, 8)),
-  ),
-  (GlassKind.regular, true) => const _GlassSpec(
-    Color(0x8C28221E), // 55 %
-    Color(0x1AFFFFFF),
-    Color(0x0FFFFFFF),
-    BoxShadow(color: Color(0x59000000), blurRadius: 30, offset: Offset(0, 10)),
-  ),
-  (GlassKind.clear, true) => const _GlassSpec(
-    Color(0x12FFFFFF), // 7 %
-    Color(0x73FFFFFF),
-    Color(0x1FFFFFFF),
-    BoxShadow(color: Color(0x66000000), blurRadius: 24, offset: Offset(0, 8)),
-  ),
-};
+_GlassSpec _spec(GlassKind kind, bool dark) {
+  final b = Brand.base(dark);
+  const white = Color(0xFFFFFFFF);
+  return switch ((kind, dark)) {
+    (GlassKind.regular, false) => _GlassSpec(
+      b.surface.withValues(alpha: 0.72),
+      white.withValues(alpha: 0.85),
+      white.withValues(alpha: 0.32),
+      BoxShadow(
+        color: b.ink.withValues(alpha: 0.07),
+        blurRadius: 24,
+        offset: const Offset(0, 8),
+      ),
+    ),
+    (GlassKind.clear, false) => _GlassSpec(
+      b.surface.withValues(alpha: 0.42),
+      white.withValues(alpha: 0.95),
+      white.withValues(alpha: 0.55),
+      BoxShadow(
+        color: b.ink.withValues(alpha: 0.1),
+        blurRadius: 20,
+        offset: const Offset(0, 6),
+      ),
+    ),
+    (GlassKind.regular, true) => _GlassSpec(
+      b.surface.withValues(alpha: 0.7),
+      b.ink.withValues(alpha: 0.1),
+      b.ink.withValues(alpha: 0.06),
+      const BoxShadow(
+        color: Color(0x59000000),
+        blurRadius: 24,
+        offset: Offset(0, 8),
+      ),
+    ),
+    (GlassKind.clear, true) => _GlassSpec(
+      b.ink.withValues(alpha: 0.07),
+      b.ink.withValues(alpha: 0.45),
+      b.ink.withValues(alpha: 0.12),
+      const BoxShadow(
+        color: Color(0x66000000),
+        blurRadius: 20,
+        offset: Offset(0, 6),
+      ),
+    ),
+  };
+}
 
 bool _isDark(BuildContext context) =>
     MiuixTheme.of(context).brightness == Brightness.dark;
@@ -168,6 +186,7 @@ class AmbientBackground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = _isDark(context);
+    final glow = dark ? Brand.base(true).accent : const Color(0xFFFFFFFF);
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -190,9 +209,10 @@ class AmbientBackground extends StatelessWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: RadialGradient(
-                colors: dark
-                    ? const [Color(0x47C2410F), Color(0x00C2410F)]
-                    : const [Color(0xE6FFF4E8), Color(0x00FFF4E8)],
+                colors: [
+                  glow.withValues(alpha: dark ? 0.16 : 0.5),
+                  glow.withValues(alpha: 0),
+                ],
               ),
             ),
           ),
@@ -223,7 +243,7 @@ class GlassSegmented extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = _isDark(context);
-    final ink = dark ? const Color(0xFFEDEDED) : const Color(0xFF1A1A1A);
+    final ink = Brand.inkOf(dark);
     final still = MediaQuery.disableAnimationsOf(context);
     return SizedBox(
       height: height,
@@ -253,8 +273,8 @@ class GlassSegmented extends StatelessWidget {
                         child: DecoratedBox(
                           decoration: ShapeDecoration(
                             color: dark
-                                ? const Color(0x29FFFFFF)
-                                : const Color(0xD9FFFFFF),
+                                ? Brand.base(true).ink.withValues(alpha: 0.16)
+                                : Brand.base(false).surface,
                             shape: MiuixSquircleBorder(
                               cornerRadius: (height - 6) / 2,
                             ),
@@ -358,8 +378,8 @@ class GelButton extends StatelessWidget {
     super.key,
     required this.label,
     required this.onPressed,
-    this.color = const Color(0xFFE2601F),
-    this.foreground = const Color(0xFFFFFFFF),
+    this.color,
+    this.foreground,
     this.height = 48,
     this.expand = true,
     this.icon,
@@ -369,14 +389,18 @@ class GelButton extends StatelessWidget {
   final Widget? icon;
   final String label;
   final VoidCallback? onPressed;
-  final Color color;
-  final Color foreground;
+
+  /// Defaults to the palette's primary button colors.
+  final Color? color;
+  final Color? foreground;
   final double height;
   final bool expand;
 
   @override
   Widget build(BuildContext context) {
     final enabled = onPressed != null;
+    final color = this.color ?? Brand.cta;
+    final foreground = this.foreground ?? Brand.ctaInk;
     final shape = MiuixSquircleBorder(cornerRadius: height / 2.6);
     final button = Tappable(
       onPressed: onPressed,

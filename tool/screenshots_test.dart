@@ -11,6 +11,7 @@ import 'package:course_table/appearance.dart';
 import 'package:course_table/main.dart';
 import 'package:course_table/models.dart';
 import 'package:course_table/plan.dart';
+import 'package:course_table/theme_palette.dart';
 import 'package:course_table/ui/reflection_page.dart';
 import 'package:course_table/ui/common.dart';
 import 'package:course_table/ui/schedule_page.dart';
@@ -56,7 +57,7 @@ Course _course(
   teacher: teacher,
 );
 
-AppState _state(DateTime now, {bool dark = false}) {
+AppState _state(DateTime now, {bool dark = false, String? palette}) {
   final monday = DateTime(now.year, now.month, now.day - (now.weekday - 1));
   final start = monday.subtract(const Duration(days: 7 * 6));
   final today = DateTime(now.year, now.month, now.day);
@@ -64,6 +65,7 @@ AppState _state(DateTime now, {bool dark = false}) {
     ..loading = false
     ..appearance = AppearanceSettings(
       themeMode: dark ? AppThemeMode.dark : AppThemeMode.light,
+      paletteId: palette ?? defaultPaletteId,
     )
     ..timetable = Timetable(
       semester: '2026-2027年第1学期',
@@ -138,9 +140,10 @@ Future<void> _shoot(
   String name, {
   required Widget Function(AppState) build,
   bool dark = false,
+  String? palette,
   Future<void> Function()? before,
 }) async {
-  final state = _state(DateTime.now(), dark: dark);
+  final state = _state(DateTime.now(), dark: dark, palette: palette);
   await tester.pumpWidget(build(state));
   await tester.pump(const Duration(milliseconds: 600));
   if (before != null) await before();
@@ -269,6 +272,101 @@ void main() {
             ambient: false,
           ),
         );
+      },
+    );
+  });
+
+  // A few other palettes, to check the derived colors hold up.
+  for (final (palette, dark) in [
+    ('hiana', false),
+    ('nord', true),
+    ('gruvbox', false),
+    ('catppuccin', true),
+  ]) {
+    testWidgets('palette_$palette', (tester) async {
+      await _shoot(
+        tester,
+        'palette_$palette',
+        dark: dark,
+        palette: palette,
+        build: (state) => CourseTableApp(state: state),
+      );
+    });
+  }
+
+  // Switching palettes at runtime must repaint everything, including const
+  // widgets that read Brand directly: this should match palette_hiana.
+  testWidgets('palette_switch', (tester) async {
+    late AppState app;
+    await _shoot(
+      tester,
+      'palette_switch',
+      build: (state) => CourseTableApp(state: app = state),
+      before: () async {
+        await app.setAppearance(app.appearance.copyWith(paletteId: 'hiana'));
+      },
+    );
+  });
+
+  testWidgets('appearance', (tester) async {
+    await _shoot(
+      tester,
+      'appearance',
+      build: (state) => CourseTableApp(state: state),
+      before: () async {
+        await tester.tap(find.text('设置').last);
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.drag(
+          find.byType(Scrollable).last,
+          const Offset(0, -1700),
+        );
+      },
+    );
+  });
+
+  // Text fields with and without content, to catch overlapping labels.
+  testWidgets('input_plan', (tester) async {
+    await _shoot(
+      tester,
+      'input_plan',
+      build: (state) => CourseTableApp(state: state),
+      before: () async {
+        await tester.tap(find.text('自学').last);
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.tap(find.byWidgetPredicate((w) => w is RoundIconButton && w.label == '添加卡片').last);
+        for (var i = 0; i < 10; i++) {
+          await tester.pump(const Duration(milliseconds: 100));
+        }
+        await tester.enterText(find.byType(EditableText).first, 'MIT 16.01');
+      },
+    );
+  });
+
+  testWidgets('input_event', (tester) async {
+    await _shoot(
+      tester,
+      'input_event',
+      build: (state) => CourseTableApp(state: state),
+      before: () async {
+        await tester.tap(find.byWidgetPredicate((w) => w is RoundIconButton && w.label == '新建事件').last);
+        for (var i = 0; i < 10; i++) {
+          await tester.pump(const Duration(milliseconds: 100));
+        }
+        await tester.enterText(find.byType(EditableText).first, '社团例会');
+      },
+    );
+  });
+
+  testWidgets('input_prompt', (tester) async {
+    await _shoot(
+      tester,
+      'input_prompt',
+      build: (state) => CourseTableApp(state: state),
+      before: () async {
+        await tester.tap(find.text('设置').last);
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.tap(find.text('晨间问题').first);
+        await tester.pump(const Duration(milliseconds: 400));
       },
     );
   });

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -10,9 +11,11 @@ import '../appearance.dart';
 import '../island_controller.dart';
 import '../notification_service.dart';
 import '../plan.dart';
+import '../theme_palette.dart';
 import '../reminders.dart';
 import '../platform_capabilities.dart';
 import 'actions.dart';
+import 'appearance_picker.dart';
 import 'common.dart';
 import 'icons.dart';
 import 'schedule_page.dart';
@@ -35,6 +38,8 @@ enum _Dialog {
   morningPrompt,
   eveningPrompt,
   island,
+  palette,
+  font,
 }
 
 class _SettingsPageState extends State<SettingsPage>
@@ -42,6 +47,9 @@ class _SettingsPageState extends State<SettingsPage>
   final _island = IslandController();
   final _scroll = ScrollController();
   final _prompt = TextEditingController();
+  final _paletteText = TextEditingController();
+  String? _paletteName;
+  String? _paletteError;
   bool _islandEnabled = false;
   IslandCapability? _capability;
   _Dialog _dialog = _Dialog.none;
@@ -65,6 +73,7 @@ class _SettingsPageState extends State<SettingsPage>
     widget.reselect.removeListener(_toTop);
     _scroll.dispose();
     _prompt.dispose();
+    _paletteText.dispose();
     super.dispose();
   }
 
@@ -135,6 +144,105 @@ class _SettingsPageState extends State<SettingsPage>
 
   void _close() => setState(() => _dialog = _Dialog.none);
 
+  void _openPaletteImport(AppState state) {
+    final custom = state.appearance.customPalette;
+    _paletteText.text = custom == null
+        ? ''
+        : const JsonEncoder.withIndent('  ').convert(custom.toJson());
+    _paletteName = custom?.label;
+    _paletteError = null;
+    setState(() => _dialog = _Dialog.palette);
+  }
+
+  Future<void> _pickPaletteFile() async {
+    final result = await FilePicker.platform.pickFiles(withData: true);
+    final file = result?.files.single;
+    final bytes = file?.bytes;
+    if (file == null || bytes == null) return;
+    setState(() {
+      _paletteText.text = utf8.decode(bytes, allowMalformed: true);
+      _paletteName = file.name.replaceAll(RegExp(r'\.\w+$'), '');
+      _paletteError = null;
+    });
+  }
+
+  void _applyPalette(AppState state) {
+    final palette = parsePalette(
+      _paletteText.text,
+      fallbackName: _paletteName ?? '导入的配色',
+    );
+    if (palette == null) {
+      setState(
+        () => _paletteError =
+            '认不出这段配色。支持海纳 JSON、base16 / base24、VS Code 主题和 CSS 变量。',
+      );
+      return;
+    }
+    state.setAppearance(
+      state.appearance.copyWith(
+        customPalette: palette,
+        paletteId: customPaletteId,
+      ),
+    );
+    _close();
+  }
+
+  void _deletePalette(AppState state) {
+    final appearance = state.appearance;
+    state.setAppearance(
+      appearance.copyWith(
+        removeCustomPalette: true,
+        paletteId: appearance.paletteId == customPaletteId
+            ? defaultPaletteId
+            : appearance.paletteId,
+      ),
+    );
+    _close();
+  }
+
+  Future<void> _importFont(AppState state) async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['ttf', 'otf', 'ttc'],
+      withData: true,
+    );
+    final file = result?.files.single;
+    final bytes = file?.bytes;
+    if (file == null || bytes == null) return;
+    final directory = await getApplicationDocumentsDirectory();
+    final extension = (file.extension ?? 'ttf').toLowerCase();
+    // A new name per import: the engine keeps a loaded family for good, so
+    // reusing a name would keep showing the old font.
+    final copy = File(
+      '${directory.path}/font_${DateTime.now().millisecondsSinceEpoch}.$extension',
+    );
+    await copy.writeAsBytes(bytes, flush: true);
+    final old = state.appearance.fontPath;
+    final name = file.name.replaceAll(RegExp(r'\.\w+$'), '');
+    final ok = await state.setAppearance(
+      state.appearance.copyWith(fontPath: copy.path, fontName: name),
+    );
+    if (!ok) {
+      await _deleteQuietly(copy.path);
+      toast('这个文件读不出字体，换一个 .ttf / .otf 试试');
+      return;
+    }
+    if (old != null) await _deleteQuietly(old);
+    toast('字体已换成 $name');
+  }
+
+  Future<void> _resetFont(AppState state) async {
+    final old = state.appearance.fontPath;
+    await state.setAppearance(state.appearance.copyWith(removeFont: true));
+    if (old != null) await _deleteQuietly(old);
+  }
+
+  static Future<void> _deleteQuietly(String path) async {
+    try {
+      await File(path).delete();
+    } catch (_) {}
+  }
+
   Widget _value(String text) => Text(
     text,
     style: TypeScale.value.copyWith(color: Palette(context).secondary),
@@ -200,6 +308,8 @@ class _SettingsPageState extends State<SettingsPage>
       _Dialog.morningPrompt => '晨间问题',
       _Dialog.eveningPrompt => '晚间问题',
       _Dialog.island => '让灵动岛生效',
+      _Dialog.palette => '导入配色',
+      _Dialog.font => '字体',
       _Dialog.none => null,
     };
 
@@ -335,6 +445,9 @@ class _SettingsPageState extends State<SettingsPage>
                         selectedIndex: _reminders
                             .indexOf(state.reminderMinutes)
                             .clamp(0, _reminders.length - 1),
+                        summary: table != null && table.startDate == null
+                            ? '先设置开学日期，才知道哪周上哪些课'
+                            : null,
                         onSelectedIndexChange: (index) =>
                             state.setReminderMinutes(_reminders[index]),
                       ),
@@ -445,7 +558,9 @@ class _SettingsPageState extends State<SettingsPage>
                             color: TileColors.teal,
                           ),
                         ),
-                        summary: !_islandEnabled
+                        summary: table != null && table.startDate == null
+                            ? '先设置开学日期，才知道哪周上哪些课'
+                            : !_islandEnabled
                             ? '上课和课前显示在小米超级岛 / 焦点通知'
                             : (_capability?.description ?? '运行中'),
                         value: _islandEnabled,
@@ -481,7 +596,7 @@ class _SettingsPageState extends State<SettingsPage>
                   children: [
                     MergeSemantics(
                       child: MiuixOverlayDropdownPreference(
-                        title: '深色模式',
+                        title: '深浅模式',
                         startAction: const Padding(
                           padding: EdgeInsets.only(right: 14),
                           child: IconTile(
@@ -496,6 +611,40 @@ class _SettingsPageState extends State<SettingsPage>
                         onSelectedIndexChange: (index) => state.setAppearance(
                           appearance.copyWith(themeMode: _themeModes[index]),
                         ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          '配色',
+                          style: TypeScale.section.copyWith(
+                            color: palette.secondary,
+                          ),
+                        ),
+                      ),
+                    ),
+                    PaletteGrid(
+                      appearance: appearance,
+                      onPick: (id) => state.setAppearance(
+                        appearance.copyWith(paletteId: id),
+                      ),
+                      onImport: () => _openPaletteImport(state),
+                    ),
+                    MergeSemantics(
+                      child: MiuixArrowPreference(
+                        title: '字体',
+                        startAction: const Padding(
+                          padding: EdgeInsets.only(right: 14),
+                          child: IconTile(
+                            AppIcons.journal,
+                            color: TileColors.slate,
+                          ),
+                        ),
+                        summary: '支持导入 .ttf / .otf',
+                        endActions: [_value(appearance.fontName ?? '系统默认')],
+                        onClick: () => setState(() => _dialog = _Dialog.font),
                       ),
                     ),
                     MergeSemantics(
@@ -614,9 +763,12 @@ class _SettingsPageState extends State<SettingsPage>
           MiuixOverlayDialog(
             show: _dialog != _Dialog.none,
             title: dialogTitle,
-            summary: _dialog == _Dialog.island
-                ? _capability?.description
-                : null,
+            summary: switch (_dialog) {
+              _Dialog.island => _capability?.description,
+              _Dialog.palette =>
+                '海纳 JSON · base16 / base24 · VS Code 主题 · CSS 变量',
+              _ => null,
+            },
             onDismissRequest: _close,
             content: switch (_dialog) {
               _Dialog.startDate => Column(
@@ -659,9 +811,9 @@ class _SettingsPageState extends State<SettingsPage>
               _Dialog.morningPrompt || _Dialog.eveningPrompt => Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  MiuixTextField(
+                  AppTextField(
                     controller: _prompt,
-                    label: '换行会原样显示',
+                    hint: '写下想问自己的问题',
                     minLines: 2,
                     maxLines: 4,
                   ),
@@ -725,6 +877,86 @@ class _SettingsPageState extends State<SettingsPage>
                       );
                     },
                   ),
+                ],
+              ),
+              _Dialog.palette => Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  AppTextField(
+                    controller: _paletteText,
+                    hint: paletteExample,
+                    minLines: 6,
+                    maxLines: 10,
+                    textStyle: TextStyle(
+                      color: palette.ink,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                  if (_paletteError != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        _paletteError!,
+                        style: TypeScale.secondary.copyWith(
+                          color: palette.colors.error,
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 10),
+                  SecondaryButton(
+                    text: '从文件读取',
+                    icon: AppIcons.fileImport,
+                    onPressed: _pickPaletteFile,
+                  ),
+                  if (appearance.customPalette != null) ...[
+                    const SizedBox(height: 10),
+                    MiuixTextButton(
+                      '删除导入的配色',
+                      onPressed: () => _deletePalette(state),
+                    ),
+                  ],
+                  _dialogButtons(() => _applyPalette(state)),
+                ],
+              ),
+              _Dialog.font => Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    '课表 Course 0123\n马克思主义基本原理 · 第 3–4 节',
+                    textAlign: TextAlign.center,
+                    style: TypeScale.body.copyWith(color: palette.ink),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '当前：${appearance.fontName ?? '系统默认'}。'
+                    '建议选中文字体（比如更纱黑体、霞鹜文楷）；只含英文的字体，中文会用系统字体显示。',
+                    style: TypeScale.secondary.copyWith(
+                      color: palette.secondary,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  PrimaryButton(
+                    text: '导入字体文件',
+                    icon: AppIcons.fileImport,
+                    onPressed: () {
+                      _close();
+                      _importFont(state);
+                    },
+                  ),
+                  if (appearance.fontPath != null) ...[
+                    const SizedBox(height: 10),
+                    SecondaryButton(
+                      text: '恢复系统字体',
+                      onPressed: () {
+                        _close();
+                        _resetFont(state);
+                      },
+                    ),
+                  ],
+                  const SizedBox(height: 10),
+                  SecondaryButton(text: '关闭', onPressed: _close),
                 ],
               ),
               _Dialog.none => const SizedBox(height: 80),

@@ -164,53 +164,61 @@ class _ReflectionPageState extends State<ReflectionPage>
                         style: TypeScale.prompt.copyWith(color: cream),
                       ),
                       const SizedBox(height: 24),
-                      AnimatedBuilder(
-                        animation: _breath,
-                        builder: (context, _) {
-                          final scale = _scale(_breath.value);
-                          return SizedBox(
-                            width: 200,
-                            height: 200,
-                            child: Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                Transform.scale(
-                                  scale: 0.8 + (scale - 0.72) * 1.4,
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: cream.withValues(
-                                        alpha: 0.06 + (1 - scale) * 0.3,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                Transform.scale(
-                                  scale: scale * 0.8,
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      gradient: RadialGradient(
-                                        center: const Alignment(-0.3, -0.4),
-                                        colors: orb,
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: orb[1].withValues(alpha: 0.55),
-                                          blurRadius: 80,
+                      // Own layer: the orb animates every frame and its 80 px
+                      // glow is expensive, so keep it from repainting the page.
+                      RepaintBoundary(
+                        child: AnimatedBuilder(
+                          animation: _breath,
+                          builder: (context, _) {
+                            final scale = _scale(_breath.value);
+                            return SizedBox(
+                              width: 200,
+                              height: 200,
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  Transform.scale(
+                                    scale: 0.8 + (scale - 0.72) * 1.4,
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: cream.withValues(
+                                          alpha: 0.06 + (1 - scale) * 0.3,
                                         ),
-                                      ],
+                                      ),
                                     ),
                                   ),
-                                ),
-                                Text(
-                                  '0:${_left.toString().padLeft(2, '0')}',
-                                  style: TypeScale.timer.copyWith(color: cream),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
+                                  Transform.scale(
+                                    scale: scale * 0.8,
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        gradient: RadialGradient(
+                                          center: const Alignment(-0.3, -0.4),
+                                          colors: orb,
+                                        ),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: orb[1].withValues(
+                                              alpha: 0.55,
+                                            ),
+                                            blurRadius: 80,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  Text(
+                                    '0:${_left.toString().padLeft(2, '0')}',
+                                    style: TypeScale.timer.copyWith(
+                                      color: cream,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
                       ),
                       const SizedBox(height: 20),
                       AnimatedBuilder(
@@ -322,15 +330,12 @@ class _ReflectionPageState extends State<ReflectionPage>
                         ),
                       ),
                       const SizedBox(height: 8),
-                      MiuixTextField(
+                      AppTextField(
                         controller: _text,
-                        label: evening ? '比如：控制体积终于懂了' : '比如：学完 16.01 第 4 讲',
-                        useLabelAsPlaceholder: true,
+                        hint: evening ? '比如：控制体积终于懂了' : '比如：学完 16.01 第 4 讲',
                         minLines: 1,
                         maxLines: 4,
-                        textStyle: TypeScale.body.copyWith(
-                          color: const Color(0xFFFFFFFF),
-                        ),
+                        textStyle: const TextStyle(color: Color(0xFFFFFFFF)),
                         colors: const MiuixTextFieldColors(
                           backgroundColor: Color(0x1FFFFFFF),
                           labelColor: Color(0xB3FFFFFF),
